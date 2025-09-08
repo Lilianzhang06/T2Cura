@@ -1,0 +1,66 @@
+
+import requests
+import json
+import os
+from typing import Optional
+
+class AliyunASRClient:
+    """
+    阿里云语音识别客户端，支持多方言ASR服务。
+    用于T2Cura交互流，实现语音转文字功能。
+    """
+
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.getenv('ALIBABA_API_KEY')
+        if not self.api_key:
+            raise ValueError("API Key 未设置，请配置环境变量 ALIBABA_API_KEY 或传入api_key参数。")
+        self.url = "https://asr.aliyuncs.com/api/recognize"  # 示例端点
+
+    def recognize(self, audio_file_path: str, dialect: str = 'mandarin') -> str:
+        """
+        将音频文件转为文本。
+
+        参数:
+            audio_file_path: str - 音频文件路径
+            dialect: str - 方言类型，默认普通话(mandarin)
+
+        返回:
+            str - 识别出的文本
+        """
+        if not os.path.exists(audio_file_path):
+            raise FileNotFoundError(f"音频文件不存在: {audio_file_path}")
+
+        headers = {'Authorization': f'Bearer {self.api_key}'}
+        data = {'dialect': dialect, 'format': 'wav'}
+
+        try:
+            with open(audio_file_path, 'rb') as f:
+                files = {'audio_file': f}
+                response = requests.post(self.url, headers=headers, data=data, files=files, timeout=30)
+
+            response.raise_for_status()
+            result = response.json()
+            transcribed_text = result.get('text', '')
+
+            print(f"[ASR] 方言: {dialect}，转写结果: {transcribed_text}")
+            return transcribed_text
+
+        except requests.RequestException as req_err:
+            print(f"[ASR] 网络请求错误: {req_err}")
+            return ""
+        except json.JSONDecodeError:
+            print("[ASR] 返回结果解析失败，非JSON格式。")
+            return ""
+        except Exception as e:
+            print(f"[ASR] 未知错误: {e}")
+            return ""
+
+
+if __name__ == "__main__":
+    # 示例：识别吴语音频
+    client = AliyunASRClient()
+    text = client.recognize('sample_audio.wav', dialect='wu')
+    if text:
+        print(f"识别结果: {text}")
+    else:
+        print("识别失败或无输出。")
