@@ -1,0 +1,4 @@
+loadvna C:\Users\shin chen\Desktop\2--ÓïÒåÍøÂç.vna
+runlayout
+egomeasures
+centralitymeasures undirected
