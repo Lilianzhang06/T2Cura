@@ -1,8 +1,10 @@
 import os
+import json
+import base64
 from typing import Optional
 from aliyunsdkcore.client import AcsClient
 from aliyunsdkcore.acs_exception import AcsException
-from aliyunsdknls.request.v20190101 import RecognizeRequest  # 假设使用nls服务
+from aliyunsdknls.request.v20190101 import RecognizeRequest
 
 class AliyunASRClient:
     """
@@ -10,20 +12,21 @@ class AliyunASRClient:
     用于T2Cura交互流，实现语音转文字功能。
     """
 
-    def __init__(self, access_key_id: Optional[str] = None, access_key_secret: Optional[str] = None, region: str = 'cn-shanghai'):
+    def __init__(self, access_key_id: Optional[str] = None, access_key_secret: Optional[str] = None, app_key: Optional[str] = None, region: str = 'cn-shanghai'):
         self.access_key_id = access_key_id or os.getenv('ALIBABA_ACCESS_KEY_ID')
         self.access_key_secret = access_key_secret or os.getenv('ALIBABA_ACCESS_KEY_SECRET')
-        if not (self.access_key_id and self.access_key_secret):
-            raise ValueError("Access Key ID/Secret 未设置，请配置环境变量或传入参数。")
-        self.client = AcsClient(self.access_key_id, self.access_key_secret, region)
-        self.app_key = os.getenv('ALIBABA_APP_KEY')  # 需要在阿里云控制台创建AppKey
+        self.app_key = app_key or os.getenv('ALIBABA_APP_KEY')
+        self.region = region
+        if not (self.access_key_id and self.access_key_secret and self.app_key):
+            raise ValueError("Access Key ID, Secret, or AppKey 未设置，请配置环境变量或传入参数。")
+        self.client = AcsClient(self.access_key_id, self.access_key_secret, self.region)
 
     def recognize(self, audio_file_path: str, dialect: str = 'zh-CN') -> str:
         """
         将音频文件转为文本。
 
         参数:
-            audio_file_path: str - 音频文件路径
+            audio_file_path: str - 音频文件路径（支持wav格式）
             dialect: str - 语言代码，默认'zh-CN' (普通话)，如'wu-CN' for 吴语
 
         返回:
@@ -38,13 +41,13 @@ class AliyunASRClient:
 
             request = RecognizeRequest.RecognizeRequest()
             request.set_AppKey(self.app_key)
-            request.set_Format('wav')  # 假设wav
-            request.set_SampleRate(16000)  # 常见采样率
+            request.set_Format('wav')
+            request.set_SampleRate(16000)  # 默认采样率16000Hz
             request.set_EnableVoiceDetection(True)
-            request.set_Content(audio_data)  # Base64或直接二进制，根据SDK调整
+            request.set_Content(base64.b64encode(audio_data))
 
             response = self.client.do_action_with_exception(request)
-            result = json.loads(response)
+            result = json.loads(response.decode('utf-8'))
             if result.get('Code') == 'Success':
                 transcribed_text = result.get('Result', {}).get('Text', '')
                 print(f"[ASR] 语言: {dialect}，转写结果: {transcribed_text}")
@@ -56,12 +59,15 @@ class AliyunASRClient:
         except AcsException as acs_err:
             print(f"[ASR] 阿里云API错误: {acs_err}")
             return ""
+        except json.JSONDecodeError:
+            print("[ASR] 返回结果解析失败，非JSON格式。")
+            return ""
         except Exception as e:
             print(f"[ASR] 未知错误: {e}")
             return ""
 
 if __name__ == "__main__":
-    # 示例：识别吴语音频（需设置环境变量）
+    # 示例：识别吴语音频（需设置环境变量 ALIBABA_ACCESS_KEY_ID, ALIBABA_ACCESS_KEY_SECRET, ALIBABA_APP_KEY）
     client = AliyunASRClient()
     text = client.recognize('sample_audio.wav', dialect='wu-CN')
     if text:
